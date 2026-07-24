@@ -306,6 +306,84 @@ final class UsageServiceTests: XCTestCase {
             XCTFail("Expected sonnet usage reset date")
         }
     }
+
+    func test_usageFetch_withFableUsage_showsFableUsage() async throws {
+        let responseData = try makeUsageResponseData(
+            sessionUtilization: TestConstants.sessionPercentage,
+            weeklyUtilization: TestConstants.weeklyPercentage,
+            sessionResetAt: TestConstants.sessionResetDateString,
+            weeklyResetAt: TestConstants.weeklyResetDateString,
+            sonnetUtilization: nil,
+            sonnetResetAt: nil,
+            fableUtilization: TestConstants.fablePercentage,
+            fableResetAt: TestConstants.fableResetDateString
+        )
+
+        let service = try await makeConfiguredService(responseData: responseData)
+
+        let usageData = try await service.fetchUsage(forceRefresh: true)
+
+        XCTAssertEqual(usageData.fableUsage?.utilization, TestConstants.fablePercentage)
+        if let resetAt = usageData.fableUsage?.resetAt {
+            assertDate(resetAt, equalsIso8601String: TestConstants.fableResetDateString)
+        } else {
+            XCTFail("Expected fable usage reset date")
+        }
+    }
+
+    func test_usageFetch_withWeeklyScopedFableLimit_showsFableUsage() async throws {
+        // Migrated accounts omit `seven_day_fable` and report the quota in the
+        // `limits` array instead
+        let responseData = """
+        {
+          "five_hour": {"utilization": 15.0, "resets_at": "\(TestConstants.sessionResetDateString)"},
+          "seven_day": {"utilization": 6.0, "resets_at": "\(TestConstants.weeklyResetDateString)"},
+          "seven_day_sonnet": null,
+          "seven_day_opus": null,
+          "limits": [
+            {"kind": "session", "group": "session", "percent": 15, "resets_at": "\(TestConstants.sessionResetDateString)", "scope": null, "is_active": true},
+            {"kind": "weekly_all", "group": "weekly", "percent": 6, "resets_at": "\(TestConstants.weeklyResetDateString)", "scope": null, "is_active": false},
+            {"kind": "weekly_scoped", "group": "weekly", "percent": \(TestConstants.fablePercentage), "resets_at": "\(TestConstants.fableResetDateString)", "scope": {"model": {"id": null, "display_name": "Fable"}, "surface": null}, "is_active": false}
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let service = try await makeConfiguredService(responseData: responseData)
+
+        let usageData = try await service.fetchUsage(forceRefresh: true)
+
+        XCTAssertEqual(usageData.fableUsage?.utilization, TestConstants.fablePercentage)
+        if let resetAt = usageData.fableUsage?.resetAt {
+            assertDate(resetAt, equalsIso8601String: TestConstants.fableResetDateString)
+        } else {
+            XCTFail("Expected fable usage reset date")
+        }
+    }
+
+    private func makeConfiguredService(responseData: Data) async throws -> UsageService {
+        let networkService = NetworkServiceStub(responseData: responseData)
+        let cacheRepository = CacheRepositoryFake()
+        let keychainRepository = KeychainRepositoryFake()
+        let settingsRepository = SettingsRepositoryFake()
+
+        let service = UsageService(
+            networkService: networkService,
+            cacheRepository: cacheRepository,
+            keychainRepository: keychainRepository,
+            settingsRepository: settingsRepository
+        )
+
+        try await keychainRepository.save(
+            sessionKey: TestConstants.sessionKeyValue,
+            account: "default"
+        )
+
+        var settings = AppSettings.default
+        settings.cachedOrganizationId = UUID(uuidString: TestConstants.organizationUUIDString)
+        try await settingsRepository.save(settings)
+
+        return service
+    }
 }
 
 // MARK: - Helpers
@@ -316,12 +394,20 @@ private func makeUsageResponseData(
     sessionResetAt: String?,
     weeklyResetAt: String?,
     sonnetUtilization: Double?,
-    sonnetResetAt: String?
+    sonnetResetAt: String?,
+    fableUtilization: Double? = nil,
+    fableResetAt: String? = nil
 ) throws -> Data {
     let sonnetUsage = sonnetUtilization.map {
         UsageLimitResponse(
             utilization: $0,
             resetsAt: sonnetResetAt
+        )
+    }
+    let fableUsage = fableUtilization.map {
+        UsageLimitResponse(
+            utilization: $0,
+            resetsAt: fableResetAt
         )
     }
 
@@ -334,7 +420,9 @@ private func makeUsageResponseData(
             utilization: weeklyUtilization,
             resetsAt: weeklyResetAt
         ),
-        sevenDaySonnet: sonnetUsage
+        sevenDaySonnet: sonnetUsage,
+        sevenDayFable: fableUsage,
+        limits: nil
     )
 
     return try JSONEncoder().encode(response)
@@ -349,6 +437,7 @@ private func makeUsageData(percentage: Double) -> UsageData {
         sessionUsage: sessionUsage,
         weeklyUsage: weeklyUsage,
         sonnetUsage: nil,
+        fableUsage: nil,
         lastUpdated: Date()
     )
 }

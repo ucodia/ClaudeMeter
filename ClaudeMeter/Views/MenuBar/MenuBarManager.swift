@@ -71,6 +71,9 @@ final class MenuBarManager {
             self?.closePopover()
         }
         let hostingController = NSHostingController(rootView: popoverView)
+        // Size the popover to the SwiftUI content so it grows with the number
+        // of visible cards instead of scrolling
+        hostingController.sizingOptions = .preferredContentSize
 
         let popover = NSPopover()
         popover.contentViewController = hostingController

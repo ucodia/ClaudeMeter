@@ -85,36 +85,44 @@ struct UsagePopoverView: View {
 
             // Content
             if let usageData = appModel.usageData {
-                ScrollView {
-                    VStack(spacing: 16) {
-                        // Session usage card
-                        UsageCardView(
-                            title: "5-Hour Session",
-                            usageLimit: usageData.sessionUsage,
-                            icon: "gauge.with.dots.needle.67percent",
-                            windowDuration: Constants.Pacing.sessionWindow
-                        )
+                VStack(spacing: 16) {
+                    // Session usage card
+                    UsageCardView(
+                        title: "5-Hour Session",
+                        usageLimit: usageData.sessionUsage,
+                        icon: "gauge.with.dots.needle.67percent",
+                        windowDuration: Constants.Pacing.sessionWindow
+                    )
 
-                        // Weekly usage card
+                    // Weekly usage card
+                    UsageCardView(
+                        title: "Weekly Usage",
+                        usageLimit: usageData.weeklyUsage,
+                        icon: "calendar",
+                        windowDuration: Constants.Pacing.weeklyWindow
+                    )
+
+                    // Sonnet usage card (conditional rendering)
+                    if appModel.settings.isSonnetUsageShown, let sonnetUsage = usageData.sonnetUsage {
                         UsageCardView(
-                            title: "Weekly Usage",
-                            usageLimit: usageData.weeklyUsage,
-                            icon: "calendar",
+                            title: "Weekly Sonnet",
+                            usageLimit: sonnetUsage,
+                            icon: "sparkles",
                             windowDuration: Constants.Pacing.weeklyWindow
                         )
-
-                        // Sonnet usage card (conditional rendering)
-                        if appModel.settings.isSonnetUsageShown, let sonnetUsage = usageData.sonnetUsage {
-                            UsageCardView(
-                                title: "Weekly Sonnet",
-                                usageLimit: sonnetUsage,
-                                icon: "sparkles",
-                                windowDuration: Constants.Pacing.weeklyWindow
-                            )
-                        }
                     }
-                    .padding()
+
+                    // Fable usage card (conditional rendering)
+                    if appModel.settings.isFableUsageShown, let fableUsage = usageData.fableUsage {
+                        UsageCardView(
+                            title: "Weekly Fable",
+                            usageLimit: fableUsage,
+                            icon: "book.closed",
+                            windowDuration: Constants.Pacing.weeklyWindow
+                        )
+                    }
                 }
+                .padding()
             } else {
                 // Loading state
                 VStack(spacing: 16) {
@@ -123,7 +131,7 @@ struct UsagePopoverView: View {
                         .font(.callout)
                         .foregroundColor(.secondary)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, minHeight: 350)
                 .padding()
             }
 
@@ -149,7 +157,7 @@ struct UsagePopoverView: View {
             }
             .padding()
         }
-        .frame(width: 320, height: 460)
+        .frame(width: 320)
         .background(Color(nsColor: .windowBackgroundColor))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Usage Dashboard")

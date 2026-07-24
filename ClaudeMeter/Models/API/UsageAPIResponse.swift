@@ -12,11 +12,45 @@ struct UsageAPIResponse: Codable {
     let fiveHour: UsageLimitResponse
     let sevenDay: UsageLimitResponse
     let sevenDaySonnet: UsageLimitResponse?
+    let sevenDayFable: UsageLimitResponse?
+    let limits: [ScopedLimitResponse]?
 
     enum CodingKeys: String, CodingKey {
         case fiveHour = "five_hour"
         case sevenDay = "seven_day"
         case sevenDaySonnet = "seven_day_sonnet"
+        case sevenDayFable = "seven_day_fable"
+        case limits
+    }
+}
+
+/// Entry in the `limits` array. Migrated accounts report per-model weekly
+/// quotas here (`kind: "weekly_scoped"`, model display name in `scope`)
+/// instead of dedicated `seven_day_*` fields. All fields are optional so an
+/// unfamiliar entry never fails the whole decode.
+struct ScopedLimitResponse: Codable {
+    let kind: String?
+    let percent: Double?
+    let resetsAt: String?
+    let scope: Scope?
+
+    enum CodingKeys: String, CodingKey {
+        case kind
+        case percent
+        case resetsAt = "resets_at"
+        case scope
+    }
+
+    struct Scope: Codable {
+        let model: Model?
+
+        struct Model: Codable {
+            let displayName: String?
+
+            enum CodingKeys: String, CodingKey {
+                case displayName = "display_name"
+            }
+        }
     }
 }
 
@@ -79,6 +113,22 @@ extension UsageAPIResponse {
             )
         }
 
+        // Fable quota lives in a dedicated field on older accounts, but in the
+        // `limits` array (`weekly_scoped` entry) on migrated ones
+        let fableResponse = sevenDayFable ?? weeklyScopedResponse(modelNamed: "Fable")
+        let fableLimit: UsageLimit? = try fableResponse.flatMap { fable -> UsageLimit? in
+            let fableResetDate = try parseResetDate(
+                from: fable.resetsAt,
+                field: "sevenDayFable.resetsAt",
+                formatter: iso8601Formatter,
+                fallback: Constants.Pacing.weeklyWindow
+            )
+            return UsageLimit(
+                utilization: fable.utilization,
+                resetAt: fableResetDate
+            )
+        }
+
         return UsageData(
             sessionUsage: UsageLimit(
                 utilization: fiveHour.utilization,
@@ -89,8 +139,22 @@ extension UsageAPIResponse {
                 resetAt: weeklyResetDate
             ),
             sonnetUsage: sonnetLimit,
+            fableUsage: fableLimit,
             lastUpdated: Date()
         )
+    }
+
+    /// Adapts a `weekly_scoped` entry from `limits` into the same shape as a
+    /// dedicated `seven_day_*` field (the array reports `percent` rather than
+    /// `utilization`).
+    private func weeklyScopedResponse(modelNamed name: String) -> UsageLimitResponse? {
+        guard let match = limits?.first(where: {
+            $0.kind == "weekly_scoped" &&
+            $0.scope?.model?.displayName?.caseInsensitiveCompare(name) == .orderedSame
+        }), let percent = match.percent else {
+            return nil
+        }
+        return UsageLimitResponse(utilization: percent, resetsAt: match.resetsAt)
     }
 
     private func parseResetDate(

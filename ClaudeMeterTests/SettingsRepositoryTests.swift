@@ -49,6 +49,7 @@ final class SettingsRepositoryTests: XCTestCase {
         let settings = try JSONDecoder().decode(AppSettings.self, from: data)
 
         XCTAssertTrue(settings.isColoredIcon)
+        XCTAssertFalse(settings.isFableUsageShown)
     }
 
     func test_notificationStatePersistsAcrossLaunches() async throws {

@@ -62,6 +62,7 @@ struct SettingsView: View {
                 sessionKeySection
                 refreshIntervalSection
                 sonnetUsageSection
+                fableUsageSection
                 iconStyleSection
                 launchAtLoginSection
             }
@@ -225,6 +226,28 @@ struct SettingsView: View {
             Spacer()
 
             Toggle("", isOn: $appModel.settings.isSonnetUsageShown)
+                .labelsHidden()
+        }
+        .padding()
+        .background(.quaternary.opacity(0.3))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    // MARK: - Fable Usage Section
+
+    private var fableUsageSection: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Show Fable Usage")
+                    .font(.subheadline)
+                Text("Display weekly Fable usage in the menu bar popover")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: $appModel.settings.isFableUsageShown)
                 .labelsHidden()
         }
         .padding()
